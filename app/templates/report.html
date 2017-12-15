@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block content %}
+<script type="text/javascript">
+window.onload=function() {getReport();}
+function getReport() {
+	$.get("/getReport",function(data){
+	    //初始化数据
+	    document.getElementById("tbody").innerHTML="";
+        $("#unselect_all").attr("style","display:none");
+	    $("#select_all").attr("style","display:block");
+
+	    if (data["report_paths"].length != 0){
+		for (var i=0;i<data["report_paths"].length;i++)
+		{
+			var test_case = data["report_paths"][i];
+			script_name = test_case.split("\\")[test_case.split("\\").length-1];
+			document.getElementById("tbody").innerHTML +="<tr id='item_"+i+"'><td id='checkbox_"+i+"'><input type='checkbox'></td>" +
+				"<td style='text-align: center;'>"+Number(i+1)+"</td>" +
+				"<td id='case_"+i+"' onclick='viewReport(this.id)'>"+test_case+"</td>" +
+				"<td></td>" +
+				"</tr>";
+		}}
+		else {
+            alertMessage('<a href="case" class="alert-link">测试报告为空，先运行一次测试吧！</a>','warning');
+        }
+	});
+}
+
+function viewReport(id) {
+	var params = {};
+	var alertId = "modal-alert";
+	params["caseName"] = $("#"+id).text();
+	$.get("/readCase",params,function(result){
+		if(result["content"]){
+			$("#report").html(result["content"]);
+			//弹出弹出框
+			$('#caseModal').modal('show');
+		}else
+		{
+			alertMessage(result["exception"],"danger");
+		}
+		//刷新用例列表
+		getReport()
+		});
+}
+
+function viewReports() {
+	var params = {};
+	var alertId = "modal-alert";
+    var selects=getSelect();
+	if(selects == "") {
+	    alertMessage('未选中任何报告！','warning');
+		}
+    else {
+	    if (selects.length>1) {
+            alertMessage('默认展示第一个选中报告！','warning');
+            }
+        params["caseName"] = selects[0];
+        $.get("/readCase",params,function(result){
+            if(result["content"]){
+                $("#report").html(result["content"]);
+                //弹出弹出框
+                $('#caseModal').modal('show');
+            }else
+            {
+                alertMessage(result["exception"],"danger");
+            }
+            //刷新用例列表
+            getReport()
+            });
+    }
+}
+
+function alertMessage(message,type,alertId) {
+    //type: success info warning danger
+	type=type||"success";
+	alertId=alertId||"report-alert";
+	var alert = $("#"+alertId);
+	alert.removeClass();
+	alert.addClass("alert alert-dismissible alert-"+type);
+	alert.html('<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' + message);
+	alert.removeAttr("hidden");
+
+	//Bootstrap alert is removed from the DOM when you click on Close, you need to use close.bs.alert event if you want the alert to stay in the DOM and be reused.
+	alert.on("close.bs.alert", function () {
+		alert.hide(); //hide the alert
+		return false; //don't remove it from DOM
+		});
+
+	// Bootstrap Alert Auto Close,a smooth slideup
+	alert.fadeTo(3000, 500).slideUp(500, function(){
+		alert.slideUp(500);
+	});
+}
+
+function getSelect() {
+    var inputs = $("input")
+	var selects = [];
+	var j = 0;
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type=="checkbox" && inputs[i].checked==true) {
+			selects[j++] = inputs[i].parentNode.parentNode.childNodes[2].innerText;
+		}
+	}
+	return selects
+}
+
+function delReport() {
+	var params = {};
+	var selects=getSelect();
+	if(selects == "") {
+	    alertMessage('未选中任何报告！','warning');
+		}
+	else {
+	    if (confirm("删除后文件将无法恢复，您确定要删除吗？"))
+		{
+			params["caseFiles"]=selects;
+			$.post("/delCase",params,function(result){
+			    if (result['desc']=='pass') {
+				    alertMessage("用例文件删除成功！");
+					//刷新用例列表
+					getReport();}
+				else {
+				   alertMessage(result['desc'],'danger');}
+			});
+		}
+	}
+}
+
+function sendMail() {
+    var params = {};
+	var alertId = "modal-alert";
+    var selects=getSelect();
+	if(selects == "") {
+	    alertMessage('未选中任何报告！','warning');
+		}
+    else {
+	    if (selects.length>1) {
+            alertMessage('默认发送第一个选中报告','warning');
+            }
+
+        params["reportName"] = selects[0];
+	    alertMessage("开始发送测试报告，请稍候...");
+        var button=$("#send-mail");
+        button.attr("disabled",true);
+        $.get("/sendMail",params,function(result){
+            if (result['desc']=='测试报告发送成功') {
+                alertMessage(result['desc']);
+                //刷新用例列表
+                getReport();
+                }
+            else {
+               alertMessage(result['desc'],'danger');
+            }
+            button.removeAttr("disabled");
+        });
+    }
+}
+
+function selectAll() {
+	$("#select_all").attr("style","display:none");
+	$("#unselect_all").attr("style","display:block");
+	$("tbody input[type='checkbox']").each(function(){
+		this.checked=true;
+	})
+}
+
+function unselectAll() {
+	$("#unselect_all").attr("style","display:none");
+	$("#select_all").attr("style","display:block");
+	$("tbody input[type='checkbox']").each(function(){
+		this.checked=false;
+	})
+}
+
+</script>
+
+<div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+    <p>
+		<button type="button" id="view-report" class="btn btn-success" onclick="viewReports()">查看</button>
+        <button type="button" id="del-report" class="btn btn-success" onclick="delReport()">删除</button>
+        <a type="button" id="run-case" class="btn btn-success" href="case">运行测试</a>
+        <button type="button" id="send-mail" class="btn btn-success" onclick="sendMail()">发送邮件</button>
+      </p>
+
+	<div id="report-alert" class="alert alert-success alert-dismissible" role="alert" hidden></div>
+
+    <table class="table table-hover">
+		<thead>
+			<tr>
+				<th width="5%">
+					<a id="select_all" style="display: block;" href="javascript:void(0);" onclick="selectAll()">
+						<span class="glyphicon glyphicon-unchecked"></span>
+					</a>
+					<a id="unselect_all" style="display: none;" href="javascript:void(0);" onclick="unselectAll()">
+						<span class="glyphicon glyphicon-check"></span>
+					</a>
+				</th>
+				<th width="5%" style="text-align: center;">#</th>
+				<th width="80%">路径</th>
+				<th width="10%">备注</th>
+			</tr>
+		</thead>
+		<tbody id="tbody"></tbody>
+	</table>
+
+	<!-- Modal -->
+	<div class="modal fade bs-example-modal-lg" id="caseModal" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel">
+	  <div class="modal-dialog modal-lg" role="document">
+		<div class="modal-content">
+		  <div class="modal-header">
+			<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+			<h3 class="modal-title" id="reportModalLabel">查看报告</h3>
+		  </div>
+		  <div class="modal-body" id="report">
+              <div id="modal-alert" class="alert alert-success alert-dismissible" role="alert" hidden></div>
+		  </div>
+		  <div class="modal-footer">
+			<button type="button" class="btn btn-success" data-dismiss="modal">关闭</button>
+		  </div>
+		</div>
+	  </div>
+	</div>
+
+</div>
+{% endblock %}

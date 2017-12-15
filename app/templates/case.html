@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block content %}
+<script type="text/javascript">
+window.onload=function() {getCase();}
+function getCase() {
+	$.get("/getCase",function(data){
+	    document.getElementById("tbody").innerHTML="";
+		$("#unselect_all").attr("style","display:none");
+	    $("#select_all").attr("style","display:block");
+		for (var i=0;i<data["case_paths"].length;i++)
+		{
+			var test_case = data["case_paths"][i];
+			script_name = test_case.split("\\")[test_case.split("\\").length-1];
+			document.getElementById("tbody").innerHTML +="<tr id='item_"+i+"'><td id='checkbox_"+i+"'><input type='checkbox'></td>" +
+				"<td style='text-align: center;'>"+Number(i+1)+"</td>" +
+				"<td id='case_"+i+"' onclick='editCase(this.id)'>"+test_case+"</td>" +
+				"<td></td>" +
+				"</tr>";
+		}
+	});
+}
+
+function saveCase() {
+	var params = {};
+	var alertId = "modal-alert";
+	params["caseName"] = $("#caseName").val();
+	params["caseScript"] = $("#caseScript").val();
+	params['mode']=$("#caseModalLabel").text();
+	if (params["caseName"]==''|| params["caseScript"]=='')
+	{
+	 	alertMessage("用例名称或脚本不可为空！","warning",alertId);
+	}
+	else
+	{
+		$.post("/saveCase",params,function(result){
+		if(result["desc"]=='pass'){
+			//隐藏弹出框
+			$('#caseModal').modal('hide');
+			//刷新用例列表
+			getCase()
+			alertMessage("用例文件保存成功！");
+		}else
+		{
+			alertMessage(result["desc"],"danger",alertId);
+		}
+		});
+	}
+}
+
+function editCase(id) {
+	var params = {};
+	var alertId = "modal-alert";
+	params["caseName"] = $("#"+id).text();
+	$.get("/readCase",params,function(result){
+		if(result["content"]){
+		    $("#caseModalLabel").text("编辑用例");
+		    $("#caseName").val(params["caseName"]);
+		    $("#caseName").attr("readOnly","");
+			$("#caseScript").val(result["content"]);
+			//弹出弹出框
+			$('#caseModal').modal('show');
+		}else
+		{
+			alertMessage(result["exception"],"danger");
+		}
+		//刷新用例列表
+		getCase()
+		});
+}
+
+function newCase() {
+	$("#caseModalLabel").text("新建用例");
+	$("#caseName").val("test_xxx.py");
+	$("#caseName").removeAttr("readOnly");
+	$("#caseScript").val(`# coding=utf-8
+
+import sys
+import os
+reload(sys)
+sys.setdefaultencoding("utf-8")
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+from Util import *
+
+
+class test_xxx(object):
+    # 定义测试类
+    def test_xxx(self):
+        # 定义测试方法
+        pass`);
+	//弹出弹出框
+	$('#caseModal').modal('show');
+}
+
+function alertMessage(message,type,alertId) {
+    //type: success info warning danger
+	type=type||"success";
+	alertId=alertId||"case-alert";
+	var alert = $("#"+alertId);
+	alert.removeClass();
+	alert.addClass("alert alert-dismissible alert-"+type);
+	alert.html('<button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>' + message);
+	alert.removeAttr("hidden");
+
+	//Bootstrap alert is removed from the DOM when you click on Close, you need to use close.bs.alert event if you want the alert to stay in the DOM and be reused.
+	alert.on("close.bs.alert", function () {
+		alert.hide(); //hide the alert
+		return false; //don't remove it from DOM
+		});
+
+	// Bootstrap Alert Auto Close,a smooth slideup
+	alert.fadeTo(3000, 500).slideUp(500, function(){
+		alert.slideUp(500);
+	});
+}
+
+function getSelect() {
+    var inputs = $("input")
+	var selects = [];
+	var j = 0;
+	for (var i = 0; i < inputs.length; i++) {
+		if (inputs[i].type=="checkbox" && inputs[i].checked==true) {
+			selects[j++] = inputs[i].parentNode.parentNode.childNodes[2].innerText;
+		}
+	}
+	return selects
+}
+	
+function delCase() {
+	var params = {};
+	var selects=getSelect();
+	if(selects == "") {
+	    alertMessage('未选中任何文件！','warning');
+		}
+	else {
+	    if (confirm("删除后文件将无法恢复，您确定要删除吗？"))
+		{
+			params["caseFiles"]=selects;
+			$.post("/delCase",params,function(result){
+			    if (result['desc']=='pass') {
+				    alertMessage("用例文件删除成功！");
+					//刷新用例列表
+					getCase();}
+				else {
+				   alertMessage(result['desc'],'danger');}
+			});
+		}
+	}
+}
+
+function runCase() {
+	var params = {};
+	var selects=getSelect();
+	var button=$("#run-case");
+
+	if(selects == "") {
+	    alertMessage('未选中任何文件！','warning');
+		}
+	else {
+	    button.attr("disabled", true);
+		params["caseFiles"]=selects;
+		alertMessage("后台运行测试中，请稍候...");
+		$.post("/runCase",params,function(result){
+			if (result['desc']=='0' || result['desc']) {
+				alertMessage('测试运行完成，返回码：<strong>'+result['desc']+'</strong>.\t<a href="report" class="alert-link">点击查看报告！</a>');
+				//刷新用例列表
+				getCase();}
+			else {
+			   alertMessage(result['desc'],'danger');}
+			button.removeAttr("disabled");
+		});
+	}
+}
+
+function viewReport() {
+	$.get("/getReport",function(result){
+	if(result['report_paths'].length==0) {
+		alertMessage('测试报告为空，先运行一次测试吧！',"warning");
+	}
+	else {
+		$(location).attr('href', 'report');
+	}
+});
+}
+
+function selectAll() {
+	$("#select_all").attr("style","display:none");
+	$("#unselect_all").attr("style","display:block");
+	$("tbody input[type='checkbox']").each(function(){
+		this.checked=true;
+	})
+}
+
+function unselectAll() {
+	$("#unselect_all").attr("style","display:none");
+	$("#select_all").attr("style","display:block");
+	$("tbody input[type='checkbox']").each(function(){
+		this.checked=false;
+	})
+}
+
+</script>
+
+<div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
+    <p>
+		<button type="button" id="new-case" class="btn btn-success" onclick="newCase()">新建</button>
+        <button type="button" id="del-case" class="btn btn-success" onclick="delCase()">删除</button>
+        <button type="button" id="run-case" class="btn btn-success" onclick="runCase()">运行测试</button>
+        <button type="button" id="view-report" class="btn btn-success" onclick="viewReport()">查看报告</button>
+      </p>
+
+	<div id="case-alert" class="alert alert-success alert-dismissible" role="alert" hidden></div>
+
+    <table class="table table-hover">
+		<thead>
+			<tr>
+				<th width="5%">
+					<a id="select_all" style="display: block;" href="javascript:void(0);" onclick="selectAll()">
+						<span class="glyphicon glyphicon-unchecked"></span>
+					</a>
+					<a id="unselect_all" style="display: none;" href="javascript:void(0);" onclick="unselectAll()">
+						<span class="glyphicon glyphicon-check"></span>
+					</a>
+				</th>
+				<th width="5%" style="text-align: center;">#</th>
+				<th width="80%">路径</th>
+				<th width="10%">备注</th>
+			</tr>
+		</thead>
+		<tbody id="tbody"></tbody>
+	</table>
+
+	<!-- Modal -->
+	<div class="modal fade bs-example-modal-lg" id="caseModal" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel">
+	  <div class="modal-dialog modal-lg" role="document">
+		<div class="modal-content">
+		  <div class="modal-header">
+			<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+			<h3 class="modal-title" id="caseModalLabel">新建用例</h3>
+		  </div>
+		  <div class="modal-body">
+			  <form role="form">
+				  <div id="modal-alert" class="alert alert-success alert-dismissible" role="alert" hidden></div>
+				  <div class="form-group">
+					<label class="label label-success" for="caseName">名称</label>
+					<input type="email" class="form-control" id="caseName" placeholder="test_xxx.py">
+					<label class="label label-success" for="caseScript">脚本</label>
+					<code class="language-python"><textarea class="form-control" id='caseScript' rows="15" ></textarea></code>
+					</div>
+			  </form>
+		  </div>
+		  <div class="modal-footer">
+			<button type="button" class="btn btn-success" data-dismiss="modal">关闭</button>
+			<button type="button" class="btn btn-success" onclick="saveCase()">保存</button>
+		  </div>
+		</div>
+	  </div>
+	</div>
+
+</div>
+{% endblock %}
